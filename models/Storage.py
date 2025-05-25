@@ -10,7 +10,7 @@ class Storage:
         self.filename = filename
         self.public_key = public_key
         self.private_key = private_key
-
+    
     def save_record(self, data_list):
         enc_parts = [base64.b64encode(encrypt_data(public_key, str(d))) for d in data_list]
         line = b":".join(enc_parts) + b"\n"

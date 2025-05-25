@@ -20,9 +20,7 @@ class StudentManager:
     
     # 學生查看自己個人資料
     def get_student_by_account(self, account):
-        print(f"正在查找帳號：{account}")
         for record in self.storage.load_records():
-            print(f"讀到學生記錄：{record}")
             if len(record) >= 2 and record[0] == account:
                 return {
                     "account": record[0],

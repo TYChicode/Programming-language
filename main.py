@@ -7,6 +7,12 @@ DATA_FILE = "data/users.txt"
 STUDENT_FILE = "data/students.txt"
 GRADE_FILE = "data/grades.txt"
 
+# 通用視窗設定函式
+def configure_window(window, title="視窗"):
+    window.title(title)
+    window.geometry("500x400")
+    window.resizable(False, False)
+
 # 選擇身分介面
 def show_dashboard_by_role(role, username, user_manager, student_manager, grade_manager, name):
     if role == "admin":
@@ -15,11 +21,11 @@ def show_dashboard_by_role(role, username, user_manager, student_manager, grade_
         show_teacher_dashboard(username, student_manager, grade_manager)
     elif role == "student":
         show_student_dashboard(username, name, grade_manager, student_manager)  
-        
+
 # 管理員後台  
 def show_admin_dashboard(user_manager, student_manager):
     dash = tk.Toplevel()
-    dash.title("管理員後台")
+    configure_window(dash, "管理員後台")
 
     tk.Label(dash, text="管理員功能：").pack()
     tk.Button(dash, text="管理所有帳號", command=lambda: manage_all_users(dash, user_manager)).pack()
@@ -27,29 +33,25 @@ def show_admin_dashboard(user_manager, student_manager):
 
 def manage_all_users(parent, user_manager):
     win = tk.Toplevel(parent)
-    win.title("帳號管理")
+    configure_window(win, "帳號管理")
 
-    all_users = user_manager.load_all_users() 
+    all_users = user_manager.load_all_users()
 
-    # 帳號格式
     grouped = {"admin": [], "teacher": [], "student": []}
     for u in all_users:
         grouped[u[1]].append(u)
     for role in grouped:
-        grouped[role].sort(key=lambda x: x[0])  # 依帳號排序
-    
+        grouped[role].sort(key=lambda x: x[0])
+
     for role, users in grouped.items():
-        tk.Label(win, text=f"== {role.upper()} ==",
-                 font=("Arial", 10, "bold")).pack()
+        tk.Label(win, text=f"== {role.upper()} ==", font=("Arial", 10, "bold")).pack()
         for account, r, name in users:
             frame = tk.Frame(win)
             frame.pack(fill="x", padx=5, pady=2)
             tk.Label(frame, text=f"{account} ({name})").pack(side="left")
-            tk.Button(frame, text="查看", command=lambda acc=account: user_manager.view_user_info(acc)).pack(side="left")
             tk.Button(frame, text="修改", command=lambda acc=account: edit_user(acc, user_manager)).pack(side="right")
             tk.Button(frame, text="刪除", command=lambda acc=account: delete_user(acc, user_manager, win)).pack(side="right")
 
-# 編輯使用者資料
 def edit_user(account, user_manager):
     new_pass = simpledialog.askstring("修改密碼", f"輸入 {account} 的新密碼：")
     new_name = simpledialog.askstring("修改姓名", f"輸入 {account} 的新姓名（可留空）：")
@@ -59,53 +61,91 @@ def edit_user(account, user_manager):
     else:
         messagebox.showerror("錯誤", "請重新輸入")
 
-# 刪除使用者資料
 def delete_user(account, user_manager, parent_window):
     confirm = messagebox.askyesno("確認刪除", f"確定要刪除 {account}？")
     if confirm:
         user_manager.delete_user(account)
         messagebox.showinfo("成功", f"{account} 已刪除")
         parent_window.destroy() 
-        # 重新開啟帳號管理視窗
         manage_all_users(parent_window.master, user_manager)
 
 # 教師後台
 def show_teacher_dashboard(username, student_manager, grade_manager):
     dash = tk.Toplevel()
-    dash.title("教師後台")
+    configure_window(dash, "教師後台")
 
     tk.Label(dash, text=f"教師 {username} 的功能：").pack(pady=5)
-    
+
     def show_students_list(parent, student_manager):
         win = tk.Toplevel(parent)
-        win.title("所有學生")
+        configure_window(win, "所有學生")
 
-        student_list = tk.Listbox(win, width=40)
-        student_list.pack()
-        for record in student_manager.load_students():
+        student_listbox = tk.Listbox(win, width=40)
+        student_listbox.pack()
+
+        students = student_manager.load_students()
+        for record in students:
             account = record[0]
             name = record[1] if len(record) > 1 else ""
-            student_list.insert(tk.END, f"{account} ({name})")
-    tk.Button(dash, text="檢視學生列表", command=lambda: show_students_list(dash, student_manager)).pack(pady=3)
-    
+            student_listbox.insert(tk.END, f"{account} ({name})")
+
+        def on_select():
+            selection = student_listbox.curselection()
+            if not selection:
+                messagebox.showerror("錯誤", "請先選擇一位學生")
+                return
+
+            selected_text = student_listbox.get(selection[0])
+            account = selected_text.split(" ")[0]
+            name = selected_text.split("(", 1)[1][:-1] if "(" in selected_text else account
+
+            action = simpledialog.askstring(
+                "操作選擇",
+                f"對學生 {name} 執行何種操作？輸入：edit 或 delete"
+            )
+            if action == "edit":
+                subject = simpledialog.askstring("科目", "請輸入科目：", parent=win)
+                new_score = simpledialog.askinteger("分數", "請輸入新的分數：", parent=win)
+                if subject and new_score is not None:
+                    success = grade_manager.update_grade(username, account, subject, new_score)
+                    if success:
+                        messagebox.showinfo("成功", f"{name} 的 {subject} 成績已更新")
+                    else:
+                        messagebox.showerror("失敗", "未找到對應成績")
+            elif action == "delete":
+                subject = simpledialog.askstring("科目", "請輸入要刪除的科目：", parent=win)
+                if subject:
+                    confirm = messagebox.askyesno("確認刪除", f"確定刪除 {name} 的 {subject} 成績？")
+                    if confirm:
+                        success = grade_manager.delete_grade(username, account, subject)
+                        if success:
+                            messagebox.showinfo("成功", f"{name} 的 {subject} 成績已刪除")
+                        else:
+                            messagebox.showerror("失敗", "未找到對應成績")
+            else:
+                messagebox.showwarning("取消", "未執行任何操作")
+        tk.Button(win, text="編輯／刪除選取學生成績", command=on_select).pack(pady=5)    
+    tk.Button(dash, text="編輯／刪除學生成績", command=lambda: show_students_list(dash, student_manager)).pack(pady=3)
+
     def add_grade():
-        student_name = simpledialog.askstring("學生姓名", "請輸入學生姓名：", parent=dash)
+        student_account = simpledialog.askstring("學生帳號", "請輸入學生帳號：", parent=dash)
         subject = simpledialog.askstring("科目", "請輸入科目：", parent=dash)
         score = simpledialog.askinteger("分數", "請輸入分數：", parent=dash)
-        if student_name and subject and score is not None:
-            grade_manager.save_grade(username, student_name, subject, score)
+        if student_account and subject and score is not None:
+            grade_manager.save_grade(username, student_account, subject, score)
             messagebox.showinfo("成功", "成績已新增")
 
     tk.Button(dash, text="新增學生成績", command=add_grade).pack(pady=3)
 
     def view_my_grades():
         grade_window = tk.Toplevel(dash)
-        grade_window.title("已輸入的成績")
+        configure_window(grade_window, "已輸入的成績")
         tk.Label(grade_window, text=f"{username} 輸入的成績如下：").pack()
         listbox = tk.Listbox(grade_window, width=50)
         listbox.pack()
         for t, s, subj, score in grade_manager.load_grades(teacher_filter=username):
             listbox.insert(tk.END, f"{s} - {subj}: {score} 分")
+
     tk.Button(dash, text="查看已輸入的成績", command=view_my_grades).pack(pady=3)
 
     tk.Button(dash, text="關閉", command=dash.destroy).pack(pady=5)
@@ -113,10 +153,10 @@ def show_teacher_dashboard(username, student_manager, grade_manager):
 # 學生後台
 def show_student_dashboard(account, username, grade_manager, student_manager):
     dash = tk.Toplevel()
-    dash.title("學生後台")
+    configure_window(dash, "學生後台")
 
     tk.Label(dash, text=f"學生 {username} 的功能：").pack(pady=5)
-    
+
     def view_personal_info():
         info = student_manager.get_student_by_account(account)
         if info:
@@ -127,12 +167,12 @@ def show_student_dashboard(account, username, grade_manager, student_manager):
 
     def view_grades():
         grade_window = tk.Toplevel(dash)
-        grade_window.title("成績查詢")
+        configure_window(grade_window, "成績查詢")
         tk.Label(grade_window, text=f"{username} 的成績如下：").pack()
         listbox = tk.Listbox(grade_window, width=50)
         listbox.pack()
         for t, s, subj, score in grade_manager.load_grades():
-            if s == username:
+            if s == account:
                 listbox.insert(tk.END, f"{t} - {subj}: {score} 分")
 
     tk.Button(dash, text="查看個人資料", command=view_personal_info).pack(pady=3)
@@ -142,7 +182,7 @@ def show_student_dashboard(account, username, grade_manager, student_manager):
 # 主介面
 def show_main_window():
     root = tk.Tk()
-    root.title("登入系統")
+    configure_window(root, "登入系統")
 
     tk.Label(root, text="帳號:").grid(row=0, column=0)
     entry_user = tk.Entry(root)
@@ -176,7 +216,6 @@ def show_main_window():
     student_manager = StudentManager()
     grade_manager = GradeManager()
 
-    # 登入功能
     def login():
         username = entry_user.get()
         password = entry_pass.get()
@@ -188,7 +227,6 @@ def show_main_window():
         else:
             messagebox.showerror("失敗", "登入失敗")
 
-    # 註冊功能
     def register():
         username = entry_user.get()
         password = entry_pass.get()
